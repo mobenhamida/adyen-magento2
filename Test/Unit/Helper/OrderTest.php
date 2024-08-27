@@ -639,6 +639,95 @@ class OrderTest extends AbstractAdyenTestCase
         $this->assertEquals('new', $result->getState());
     }
 
+    public function testSetPrePaymentAuthorizedCreditCardHoldNoStatusForNonCreditCardPaymentMethods()
+    {
+        $storeId = 1;
+        $status = 'credit_card_hold';
+        $eventLabel = 'payment_pre_authorized';
+
+        $orderMock = $this->createMock(MagentoOrder::class);
+        $orderMock->method('getStoreId')->willReturn($storeId);
+        $orderMock->expects($this->once())->method('setStatus')->with($status);
+        $orderMock->expects($this->once())->method('getState')->willReturn('new');
+        $orderMock->method('getPaymentMethod')->willReturn(PaymentMethods::ADYEN_HPP);
+
+        $configHelperMock = $this->createMock(Config::class);
+        $configHelperMock
+            ->method('getConfigData')
+            ->with($eventLabel, 'adyen_abstract', $storeId)
+            ->willReturn($status);
+
+        $adyenLoggerMock = $this->createMock(AdyenLogger::class);
+        $adyenLoggerMock
+            ->expects($this->atLeastOnce())
+            ->method('addAdyenNotification')
+            ->with(
+                $this->stringContains('No pre-authorised status is used so ignore'),
+                $this->stringContains('pspReference'),
+                $this->arrayHasKey('merchantReference')
+            );
+
+        $orderHelper = $this->createOrderHelper(
+            null,
+            $configHelperMock,
+            null,
+            null,
+            null,
+            null,
+            null,
+            $adyenLoggerMock
+        );
+
+        $result = $orderHelper->setPrePaymentAuthorized($orderMock);
+
+        $this->assertInstanceOf(MagentoOrder::class, $result);
+        $this->assertEquals('new', $result->getState());
+    }
+
+    public function testSetPrePaymentAuthorizedCreditCardHoldSuccess()
+    {
+        $storeId = 1;
+        $status = 'pre_authorized';
+        $adyenLoggerMock = $this->createMock(AdyenLogger::class);
+
+        $orderMock = $this->createMock(MagentoOrder::class);
+        $orderMock->method('getStoreId')->willReturn($storeId);
+        $orderMock->expects($this->once())->method('setStatus')->with($status);
+        $orderMock->expects($this->once())->method('getState')->willReturn('new');
+
+        $configHelperMock = $this->createConfiguredMock(Config::class, ['getConfigData' => $status]);
+        $adyenLoggerMock->expects($this->atLeastOnce())->method('addAdyenNotification')
+            ->withConsecutive(
+                [$this->stringContains('No new state assigned, status should be connected to one of the following states: ["new","adyen_authorized"]')],
+                [$this->stringContains('Order status is changed to Pre-authorised status')]
+            );
+
+        $paymentMock = $this->createMock(\Magento\Sales\Model\Order\Payment::class);
+        $paymentMock->method('getData')->willReturnMap([
+            ['adyen_psp_reference', null, 'test_psp_reference'],
+            ['entity_id', null, 'test_entity_id']
+        ]);
+        $orderMock->method('getPayment')->willReturn($paymentMock);
+        $orderStatusCollectionMock = $this->createOrderStatusCollection(notificationEntity::Adyen);
+
+        $orderHelper = $this->createOrderHelper(
+            $orderStatusCollectionMock,
+            $configHelperMock,
+            null,
+            null,
+            null,
+            null,
+            null,
+            $adyenLoggerMock
+        );
+
+        $result = $orderHelper->setPrePaymentAuthorized($orderMock);
+
+        $this->assertInstanceOf(MagentoOrder::class, $result);
+        $this->assertEquals('adyen_authorized', $result->getState());
+        $this->assertEquals('credit_card_hold', $result->getStatus());
+    }
+
     public function testSetStatusOrderCreation()
     {
         $paymentMethodCode = 'adyen_cc';

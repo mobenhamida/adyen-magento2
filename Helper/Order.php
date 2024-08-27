@@ -347,10 +347,17 @@ class Order extends AbstractHelper
             'adyen_abstract',
             $order->getStoreId()
         );
-        $possibleStates = Webhook::STATE_TRANSITION_MATRIX[$eventLabel];
+
+        if (
+            $status === 'credit_card_hold'
+            && $order->getPayment()->getMethod() !== PaymentMethods::ADYEN_CC
+        ) {
+            $status = null;
+        }
 
         // only do this if status in configuration is set
         if (!empty($status)) {
+            $possibleStates = Webhook::STATE_TRANSITION_MATRIX[$eventLabel];
             $order->setStatus($status);
             $order = $this->setState($order, $status, $possibleStates);
 
