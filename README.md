@@ -1,5 +1,5 @@
 
-## Changes made to implement the new order flow
+[Please find here the link to compare page](https://github.com/mobenhamida/adyen-magento2/compare/main...add-custom-order-status)
 
 ### Project setup:
 
